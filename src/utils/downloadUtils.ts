@@ -19,12 +19,12 @@ export function downloadPattern(
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
-  // Background
-  ctx.fillStyle = '#1a1a2e';
+  // White background
+  ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
   // Header
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#333333';
   ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(
@@ -46,14 +46,14 @@ export function downloadPattern(
       const y = offsetY + j * cellSize;
 
       if (cell.isExternal) {
-        ctx.fillStyle = '#2d2d44';
+        ctx.fillStyle = '#FFFFFF';
       } else {
         ctx.fillStyle = cell.color;
       }
       ctx.fillRect(x, y, cellSize, cellSize);
 
       // Grid lines
-      ctx.strokeStyle = '#444466';
+      ctx.strokeStyle = '#CCCCCC';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(x, y, cellSize, cellSize);
 
@@ -75,7 +75,7 @@ export function downloadPattern(
   }
 
   // Section lines every 10 cells
-  ctx.strokeStyle = '#8888aa';
+  ctx.strokeStyle = '#666666';
   ctx.lineWidth = 2;
   for (let i = 0; i <= N; i += 10) {
     const x = offsetX + i * cellSize;

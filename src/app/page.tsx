@@ -5,6 +5,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useEffect,
   ChangeEvent,
   DragEvent,
 } from 'react';
@@ -33,7 +34,8 @@ export default function Home() {
   const t = translations[locale];
 
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
-  const [granularity, setGranularity] = useState<number>(32);
+  const [granularity, setGranularity] = useState<number>(50);
+  const [granularityInput, setGranularityInput] = useState<string>('50');
   const [similarityThreshold, setSimilarityThreshold] = useState<number>(30);
   const [pixelationMode, setPixelationMode] = useState<PixelationMode>(
     PixelationMode.Dominant
@@ -54,7 +56,6 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,7 +74,6 @@ export default function Home() {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       ctx.drawImage(img, 0, 0);
-      // Reset results
       setMappedPixelData(null);
       setGridDimensions(null);
       setColorCounts(null);
@@ -95,6 +95,7 @@ export default function Home() {
         }
       };
       reader.readAsDataURL(file);
+      if (e.target) e.target.value = '';
     },
     [handleImageLoad]
   );
@@ -102,7 +103,7 @@ export default function Home() {
   const handleDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      setIsDragOver(false);
+      e.stopPropagation();
       const file = e.dataTransfer.files?.[0];
       if (!file || !file.type.startsWith('image/')) return;
       const reader = new FileReader();
@@ -124,7 +125,7 @@ export default function Home() {
     setStatusMessage(null);
 
     requestAnimationFrame(() => {
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
         setIsGenerating(false);
         return;
@@ -133,10 +134,11 @@ export default function Home() {
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
       const N = granularity;
-      const M = Math.round((imgHeight / imgWidth) * N);
+      const M = Math.max(1, Math.round((imgHeight / imgWidth) * N));
 
       const palette = fullBeadPalette;
-      const fallbackColor = palette[0];
+      const fallbackColor =
+        palette.find((p) => p.hex.toUpperCase() === '#FFFFFF') || palette[0];
 
       const grid = calculatePixelGrid(
         ctx,
@@ -152,8 +154,7 @@ export default function Home() {
       setMappedPixelData(grid);
       setGridDimensions({ N, M });
 
-      const { colorCounts: counts, totalCount } =
-        recalculateColorStats(grid);
+      const { colorCounts: counts, totalCount } = recalculateColorStats(grid);
       setColorCounts(counts);
       setTotalBeadCount(totalCount);
       setIsGenerating(false);
@@ -172,8 +173,7 @@ export default function Home() {
       );
       setMappedPixelData(newData);
 
-      const { colorCounts: counts, totalCount } =
-        recalculateColorStats(newData);
+      const { colorCounts: counts, totalCount } = recalculateColorStats(newData);
       setColorCounts(counts);
       setTotalBeadCount(totalCount);
       setIsRemovingBg(false);
@@ -197,13 +197,22 @@ export default function Home() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
-  // Draw preview canvas
+  const handleConfirmGranularity = useCallback(() => {
+    const val = parseInt(granularityInput, 10);
+    if (!isNaN(val) && val >= 10 && val <= 300) {
+      setGranularity(val);
+    } else {
+      setGranularityInput(granularity.toString());
+    }
+  }, [granularityInput, granularity]);
+
+  // Draw preview canvas - white background for external cells
   const drawPreview = useCallback(() => {
     const canvas = previewCanvasRef.current;
     if (!canvas || !mappedPixelData || !gridDimensions) return;
 
     const { N, M } = gridDimensions;
-    const maxWidth = Math.min(window.innerWidth - 32, 600);
+    const maxWidth = Math.min(window.innerWidth - 48, 600);
     const cellSize = Math.max(4, Math.floor(maxWidth / N));
     canvas.width = N * cellSize;
     canvas.height = M * cellSize;
@@ -211,7 +220,9 @@ export default function Home() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // White background for the entire canvas
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     for (let j = 0; j < M; j++) {
       for (let i = 0; i < N; i++) {
@@ -222,22 +233,29 @@ export default function Home() {
         const y = j * cellSize;
 
         if (cell.isExternal) {
-          ctx.fillStyle = '#1a1a2e';
+          // White for background/external cells
+          ctx.fillStyle = '#FFFFFF';
         } else {
           ctx.fillStyle = cell.color;
         }
         ctx.fillRect(x, y, cellSize, cellSize);
 
-        ctx.strokeStyle = '#2a2a4a';
+        // Grid lines - light gray
+        ctx.strokeStyle = '#DDDDDD';
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x + 0.25, y + 0.25, cellSize, cellSize);
       }
     }
   }, [mappedPixelData, gridDimensions]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     drawPreview();
   }, [drawPreview]);
+
+  // Sync granularity input
+  useEffect(() => {
+    setGranularityInput(granularity.toString());
+  }, [granularity]);
 
   const sortedColorStats = useMemo(() => {
     if (!colorCounts) return [];
@@ -252,26 +270,65 @@ export default function Home() {
   }, [colorCounts, selectedColorSystem]);
 
   return (
-    <div className="min-h-screen pb-20">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#0d0d1a]/95 backdrop-blur-sm border-b border-[#2a2a4a]">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">
-              {t.title}
-            </h1>
+    <div className="min-h-screen flex flex-col items-center overflow-x-hidden">
+      {/* Header - gradient style similar to original */}
+      <header className="w-full text-center mt-6 mb-6 sm:mt-8 sm:mb-8 relative overflow-hidden px-4">
+        {/* Decorative blurs */}
+        <div className="absolute top-0 left-0 w-48 h-48 bg-blue-900 rounded-full opacity-20 blur-3xl"></div>
+        <div className="absolute bottom-0 right-0 w-48 h-48 bg-pink-900 rounded-full opacity-20 blur-3xl"></div>
+
+        <div className="relative z-10 py-4">
+          {/* Bead icon grid */}
+          <div className="relative mb-4 inline-block" style={{ animation: 'float 3s ease-in-out infinite' }}>
+            <div className="grid grid-cols-4 gap-1.5 p-3 bg-gray-800/95 rounded-2xl shadow-2xl border border-gray-700">
+              {['bg-red-400', 'bg-blue-400', 'bg-yellow-400', 'bg-green-400',
+                'bg-purple-400', 'bg-pink-400', 'bg-orange-400', 'bg-teal-400',
+                'bg-indigo-400', 'bg-cyan-400', 'bg-lime-400', 'bg-amber-400',
+                'bg-rose-400', 'bg-sky-400', 'bg-emerald-400', 'bg-violet-400'].map((color, i) => (
+                <div
+                  key={i}
+                  className={`w-4 h-4 rounded-full ${color} shadow-lg`}
+                  style={{ animation: `float ${2 + (i % 3)}s ease-in-out infinite ${i * 0.1}s` }}
+                />
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 tracking-wide">
+            {t.title}
+          </h1>
+          <p className="mt-2 text-sm text-gray-400 tracking-wider">
+            {t.subtitle}
+          </p>
+
+          {/* Nav links */}
+          <div className="mt-4 flex items-center justify-center gap-3 text-xs">
             <Link
               href="/guide"
-              className="text-xs px-3 py-1.5 rounded-full bg-[#1a1a2e] text-[#a78bfa] border border-[#2a2a4a] hover:bg-[#2a2a4a] transition-colors"
+              className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium transition-colors"
             >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
               {t.guide}
             </Link>
+            <span className="text-gray-600">·</span>
+            <a
+              href="https://github.com/Zippland/perler-beads"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-gray-400 hover:text-gray-300 font-medium transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <path fillRule="evenodd" d="M12 0C5.37 0 0 5.48 0 12.25c0 5.42 3.44 10.01 8.2 11.63.6.12.82-.27.82-.6 0-.3-.01-1.08-.02-2.13-3.34.74-4.04-1.65-4.04-1.65-.55-1.44-1.35-1.83-1.35-1.83-1.1-.78.08-.77.08-.77 1.21.09 1.85 1.26 1.85 1.26 1.08 1.9 2.83 1.35 3.52 1.03.11-.81.42-1.35.77-1.66-2.66-.31-5.46-1.36-5.46-6.06 0-1.34.46-2.43 1.22-3.29-.12-.31-.53-1.55.12-3.23 0 0 1-.33 3.29 1.25a10.96 10.96 0 0 1 5.98 0c2.29-1.58 3.29-1.25 3.29-1.25.65 1.68.24 2.92.12 3.23.76.86 1.22 1.95 1.22 3.29 0 4.71-2.81 5.74-5.49 6.05.43.38.81 1.13.81 2.28 0 1.65-.02 2.98-.02 3.39 0 .33.22.72.83.59C20.56 22.25 24 17.67 24 12.25 24 5.48 18.63 0 12 0Z" />
+              </svg>
+              GitHub
+            </a>
+            <span className="text-gray-600">·</span>
             <select
               value={locale}
               onChange={(e) => setLocale(e.target.value as Locale)}
-              className="text-xs px-2 py-1.5 rounded-full bg-[#1a1a2e] text-[#a78bfa] border border-[#2a2a4a] outline-none cursor-pointer"
+              className="text-xs px-2 py-1 rounded-md bg-gray-800 text-gray-300 border border-gray-700 outline-none cursor-pointer"
             >
               <option value="ko">한국어</option>
               <option value="ja">日本語</option>
@@ -281,327 +338,232 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 pt-4 space-y-4">
-        {/* Upload Area */}
-        {!originalImageSrc ? (
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragOver(true);
-            }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`cursor-pointer rounded-2xl border-2 border-dashed p-12 text-center transition-all ${
-              isDragOver
-                ? 'border-[#7c3aed] bg-[#7c3aed]/10'
-                : 'border-[#2a2a4a] bg-[#1a1a2e] hover:border-[#7c3aed]/50'
-            }`}
-          >
-            <div className="flex flex-col items-center gap-3">
-              <svg
-                className="w-12 h-12 text-[#a78bfa]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z"
-                />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-white">
-                  {t.uploadTitle}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">{t.uploadDesc}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {t.uploadFormats}
-                </p>
+      <main className="w-full md:max-w-2xl flex flex-col items-center space-y-5 px-4 pb-20">
+        {/* File Upload / Drop Zone */}
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed border-gray-600 rounded-lg p-6 sm:p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-gray-800/50 transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md"
+          style={{ minHeight: '130px' }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-gray-500 mb-2 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          <p className="text-xs sm:text-sm text-gray-400">
+            {t.uploadDesc.split(t.uploadDesc)[0]}
+            <span className="font-medium text-blue-400">{t.uploadTitle}</span>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{t.uploadFormats}</p>
+        </div>
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          ref={fileInputRef}
+          className="hidden"
+        />
+
+        {/* Controls and Output */}
+        {originalImageSrc && (
+          <div className="w-full flex flex-col items-center space-y-5">
+            {/* Control Panel - card style like original */}
+            <div className="w-full md:max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-800 p-4 sm:p-5 rounded-xl shadow-md border border-gray-700">
+              {/* Granularity Input */}
+              <div className="flex-1">
+                <label htmlFor="granularityInput" className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
+                  {t.granularity} (10-300):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    id="granularityInput"
+                    value={granularityInput}
+                    onChange={(e) => setGranularityInput(e.target.value)}
+                    className="w-full p-1.5 border border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-gray-700 text-gray-200 placeholder-gray-500"
+                    min="10"
+                    max="300"
+                  />
+                </div>
               </div>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-          </div>
-        ) : (
-          <>
-            {/* Image Preview */}
-            <div className="rounded-2xl bg-[#1a1a2e] border border-[#2a2a4a] overflow-hidden">
-              <div className="p-3 flex items-center justify-between border-b border-[#2a2a4a]">
-                <span className="text-xs text-gray-400">{t.uploadTitle}</span>
+
+              {/* Similarity Threshold */}
+              <div className="flex-1">
+                <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
+                  {t.similarity} (0-100):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={similarityThreshold}
+                    onChange={(e) => setSimilarityThreshold(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <span className="text-sm font-mono text-blue-400 w-8 text-right">{similarityThreshold}</span>
+                </div>
+              </div>
+
+              {/* Action buttons row */}
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    handleConfirmGranularity();
+                    handleGenerate();
+                  }}
+                  disabled={isGenerating}
+                  className="h-9 bg-blue-500 hover:bg-blue-600 text-white text-sm px-4 rounded-md whitespace-nowrap transition-colors duration-200 shadow-sm disabled:opacity-50"
+                >
+                  {isGenerating ? t.generating : t.generate}
+                </button>
+                <button
+                  onClick={handleRemoveBackground}
+                  disabled={!mappedPixelData || !gridDimensions || isRemovingBg}
+                  className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-blue-700 bg-blue-900/30 text-blue-200 hover:bg-blue-800/40 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {isRemovingBg ? t.removingBackground : t.removeBackground}
+                </button>
+                {mappedPixelData && (
+                  <button
+                    onClick={handleDownload}
+                    className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-emerald-700 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-800/40 transition-colors duration-200 whitespace-nowrap"
+                  >
+                    {t.download}
+                  </button>
+                )}
                 <button
                   onClick={handleReset}
-                  className="text-xs text-[#a78bfa] hover:text-white transition-colors"
+                  className="inline-flex items-center justify-center h-9 px-3 text-sm rounded-md border border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors duration-200 whitespace-nowrap ml-auto"
                 >
-                  {t.changeImage}
+                  {t.reset}
                 </button>
-              </div>
-              <div className="p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={originalImageSrc}
-                  alt="Original"
-                  className="w-full rounded-lg max-h-48 object-contain"
-                />
-              </div>
-            </div>
-
-            {/* Settings */}
-            <div className="rounded-2xl bg-[#1a1a2e] border border-[#2a2a4a] p-4 space-y-5">
-              {/* Granularity */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-medium text-gray-200">
-                    {t.granularity}
-                  </label>
-                  <span className="text-sm font-mono text-[#a78bfa] bg-[#7c3aed]/20 px-2 py-0.5 rounded">
-                    {granularity}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={10}
-                  max={100}
-                  value={granularity}
-                  onChange={(e) => setGranularity(Number(e.target.value))}
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {t.granularityDesc}
-                </p>
               </div>
 
               {/* Pixelation Mode */}
-              <div>
-                <label className="text-sm font-medium text-gray-200 mb-2 block">
-                  {t.mode}
+              <div className="sm:col-span-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
+                  {t.mode}:
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() =>
-                      setPixelationMode(PixelationMode.Dominant)
-                    }
-                    className={`px-3 py-2.5 rounded-xl text-sm transition-all ${
-                      pixelationMode === PixelationMode.Dominant
-                        ? 'bg-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/30'
-                        : 'bg-[#16213e] text-gray-300 border border-[#2a2a4a]'
-                    }`}
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pixelationMode}
+                    onChange={(e) => setPixelationMode(e.target.value as PixelationMode)}
+                    className="w-full p-1.5 border border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-gray-700 text-gray-200"
                   >
-                    <div className="font-medium">{t.modeDominant}</div>
-                    <div className="text-xs opacity-70 mt-0.5">
-                      {t.modeDominantDesc}
-                    </div>
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPixelationMode(PixelationMode.Average)
-                    }
-                    className={`px-3 py-2.5 rounded-xl text-sm transition-all ${
-                      pixelationMode === PixelationMode.Average
-                        ? 'bg-[#7c3aed] text-white shadow-lg shadow-[#7c3aed]/30'
-                        : 'bg-[#16213e] text-gray-300 border border-[#2a2a4a]'
-                    }`}
-                  >
-                    <div className="font-medium">{t.modeAverage}</div>
-                    <div className="text-xs opacity-70 mt-0.5">
-                      {t.modeAverageDesc}
-                    </div>
-                  </button>
+                    <option value={PixelationMode.Dominant}>{t.modeDominant}</option>
+                    <option value={PixelationMode.Average}>{t.modeAverage}</option>
+                  </select>
                 </div>
               </div>
 
               {/* Color System */}
-              <div>
-                <label className="text-sm font-medium text-gray-200 mb-2 block">
-                  {t.colorSystem}
+              <div className="sm:col-span-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">
+                  {t.colorSystem}:
                 </label>
-                <div className="flex gap-2">
-                  {colorSystemOptions.map((opt) => (
+                <div className="flex flex-wrap gap-2">
+                  {colorSystemOptions.map((option) => (
                     <button
-                      key={opt.key}
-                      onClick={() => setSelectedColorSystem(opt.key)}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                        selectedColorSystem === opt.key
-                          ? 'bg-[#7c3aed] text-white'
-                          : 'bg-[#16213e] text-gray-400 border border-[#2a2a4a]'
+                      key={option.key}
+                      onClick={() => setSelectedColorSystem(option.key)}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-all duration-200 flex-shrink-0 ${
+                        selectedColorSystem === option.key
+                          ? 'bg-blue-500 text-white border-blue-500 shadow-md transform scale-105'
+                          : 'bg-gray-700 text-gray-300 border-gray-600 hover:border-blue-500 hover:bg-gray-600'
                       }`}
                     >
-                      {opt.name}
+                      {option.name}
                     </button>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Background Removal Sensitivity */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-medium text-gray-200">
-                    {t.similarity}
-                  </label>
-                  <span className="text-sm font-mono text-[#a78bfa] bg-[#7c3aed]/20 px-2 py-0.5 rounded">
-                    {similarityThreshold}
-                  </span>
+            {/* Status message */}
+            {statusMessage && (
+              <div className="w-full md:max-w-2xl text-center text-sm text-emerald-400 bg-emerald-900/20 border border-emerald-800/30 rounded-lg py-2">
+                {statusMessage}
+              </div>
+            )}
+
+            {/* Canvas Preview */}
+            <div className="w-full md:max-w-2xl">
+              <canvas ref={originalCanvasRef} className="hidden"></canvas>
+
+              {/* Preview container - white background card like original */}
+              <div className="bg-gray-800 p-4 rounded-xl shadow-md border border-gray-700">
+                {gridDimensions && (
+                  <div className="mb-3 flex items-center justify-between text-xs text-gray-400">
+                    <span>{t.result} ({gridDimensions.N} × {gridDimensions.M})</span>
+                    <span>{t.totalBeads}: {totalBeadCount.toLocaleString()}</span>
+                  </div>
+                )}
+                {/* White background container for the canvas */}
+                <div className="flex justify-center bg-white p-2 rounded-lg overflow-x-auto overflow-y-hidden"
+                     style={{ minHeight: '150px' }}>
+                  <canvas
+                    ref={previewCanvasRef}
+                    className="max-w-full"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={similarityThreshold}
-                  onChange={(e) =>
-                    setSimilarityThreshold(Number(e.target.value))
-                  }
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {t.similarityDesc}
-                </p>
               </div>
             </div>
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="w-full py-3.5 rounded-2xl text-white font-semibold text-base transition-all bg-gradient-to-r from-[#7c3aed] to-[#6d28d9] hover:from-[#8b5cf6] hover:to-[#7c3aed] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#7c3aed]/20"
-            >
-              {isGenerating ? t.generating : t.generate}
-            </button>
-
-            {/* Results */}
-            {mappedPixelData && gridDimensions && (
-              <>
-                {/* Status Message */}
-                {statusMessage && (
-                  <div className="text-center text-sm text-emerald-400 bg-emerald-900/20 border border-emerald-800/30 rounded-xl py-2">
-                    {statusMessage}
-                  </div>
-                )}
-
-                {/* Preview Canvas */}
-                <div className="rounded-2xl bg-[#1a1a2e] border border-[#2a2a4a] overflow-hidden">
-                  <div className="p-3 border-b border-[#2a2a4a]">
-                    <span className="text-sm font-medium text-gray-200">
-                      {t.result}
-                    </span>
-                    <span className="text-xs text-gray-500 ml-2">
-                      {gridDimensions.N} × {gridDimensions.M}
-                    </span>
-                  </div>
-                  <div className="p-3 flex justify-center overflow-auto">
-                    <canvas
-                      ref={previewCanvasRef}
-                      className="max-w-full rounded-lg"
-                    />
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={handleRemoveBackground}
-                    disabled={isRemovingBg}
-                    className="py-3 rounded-xl text-sm font-medium transition-all bg-[#16213e] text-gray-200 border border-[#2a2a4a] hover:bg-[#1e2d4a] disabled:opacity-50"
-                  >
-                    {isRemovingBg ? t.removingBackground : t.removeBackground}
-                  </button>
-                  <button
-                    onClick={handleDownload}
-                    className="py-3 rounded-xl text-sm font-medium transition-all bg-emerald-800/50 text-emerald-200 border border-emerald-700/50 hover:bg-emerald-700/50"
-                  >
-                    {t.download}
-                  </button>
-                </div>
-
-                {/* Color Statistics */}
-                <div className="rounded-2xl bg-[#1a1a2e] border border-[#2a2a4a] overflow-hidden">
-                  <div className="p-3 border-b border-[#2a2a4a] flex justify-between items-center">
-                    <span className="text-sm font-medium text-gray-200">
-                      {t.colorStats}
-                    </span>
-                    <div className="flex gap-3 text-xs text-gray-400">
-                      <span>
-                        {t.totalBeads}:{' '}
-                        <span className="text-[#a78bfa] font-medium">
-                          {totalBeadCount.toLocaleString()}
+            {/* Color Statistics */}
+            {colorCounts && Object.keys(colorCounts).length > 0 && (
+              <div className="w-full md:max-w-2xl bg-gray-800 p-4 rounded-xl shadow-md border border-gray-700">
+                <h3 className="text-base font-semibold mb-1 text-gray-200 text-center">
+                  {t.colorStats}
+                </h3>
+                <p className="text-xs text-center text-gray-400 mb-3">
+                  {t.totalBeads}: {totalBeadCount.toLocaleString()} | {t.colors}: {sortedColorStats.length}
+                </p>
+                <ul className="space-y-1 max-h-72 overflow-y-auto pr-1 text-sm">
+                  {sortedColorStats.map((item) => (
+                    <li
+                      key={item.hex}
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span
+                          className="inline-block w-7 h-7 rounded-lg border border-gray-600 flex-shrink-0 shadow-sm"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="font-mono font-medium text-gray-200">
+                          {item.displayKey}
                         </span>
+                      </div>
+                      <span className="text-sm text-blue-400 font-medium">
+                        {item.count} <span className="text-gray-500 text-xs">{t.count}</span>
                       </span>
-                      <span>
-                        {t.colors}:{' '}
-                        <span className="text-[#a78bfa] font-medium">
-                          {sortedColorStats.length}
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <div className="grid grid-cols-1 gap-1.5 max-h-72 overflow-y-auto">
-                      {sortedColorStats.map((item) => (
-                        <div
-                          key={item.hex}
-                          className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#16213e]/50 hover:bg-[#16213e] transition-colors"
-                        >
-                          <div
-                            className="w-8 h-8 rounded-lg border border-[#2a2a4a] flex-shrink-0"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-mono text-gray-200">
-                              {item.displayKey}
-                            </span>
-                          </div>
-                          <span className="text-sm font-medium text-[#a78bfa]">
-                            {item.count}{' '}
-                            <span className="text-gray-500 text-xs">
-                              {t.count}
-                            </span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </>
+          </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="max-w-lg mx-auto px-4 mt-8 pb-6">
-        <div className="border-t border-[#2a2a4a] pt-4 text-center text-xs text-gray-500 space-y-1">
+      <footer className="w-full max-w-2xl mx-auto px-4 mt-auto pb-6">
+        <div className="border-t border-gray-800 pt-4 text-center text-xs text-gray-500 space-y-1">
           <p>
             {t.license}: AGPL-3.0 |{' '}
             <a
               href="https://github.com/Zippland/perler-beads"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#a78bfa] hover:underline"
+              className="text-blue-400 hover:underline"
             >
-              {t.originalProject}
-            </a>
-          </p>
-          <p>
-            <a
-              href="https://github.com/rchemist0123/pearl_beads_generator_global"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#a78bfa] hover:underline"
-            >
-              Pearl Beads Generator Global
+              {t.originalProject}: Zippland/perler-beads
             </a>
           </p>
         </div>
       </footer>
-
-      {/* Hidden canvas for image processing */}
-      <canvas ref={originalCanvasRef} className="hidden" />
     </div>
   );
 }
