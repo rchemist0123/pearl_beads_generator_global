@@ -270,39 +270,64 @@ export default function Home() {
   }, [colorCounts, selectedColorSystem]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center overflow-x-hidden">
-      {/* Header - gradient style similar to original */}
-      <header className="w-full text-center mt-6 mb-6 sm:mt-8 sm:mb-8 relative overflow-hidden px-4">
+    <div className="min-h-screen p-4 sm:p-6 flex flex-col items-center overflow-x-hidden">
+      {/* Header */}
+      <header className="w-full md:max-w-4xl text-center mt-6 mb-8 sm:mt-8 sm:mb-10 relative overflow-hidden">
         {/* Decorative blurs */}
         <div className="absolute top-0 left-0 w-48 h-48 bg-blue-900 rounded-full opacity-20 blur-3xl"></div>
         <div className="absolute bottom-0 right-0 w-48 h-48 bg-pink-900 rounded-full opacity-20 blur-3xl"></div>
+        {/* Decorative dots */}
+        <div className="absolute top-0 right-0 grid grid-cols-5 gap-1 opacity-10">
+          {[...Array(25)].map((_, i) => (
+            <div key={`tr-${i}`} className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
+          ))}
+        </div>
+        <div className="absolute bottom-0 left-0 grid grid-cols-5 gap-1 opacity-10">
+          {[...Array(25)].map((_, i) => (
+            <div key={`bl-${i}`} className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
+          ))}
+        </div>
 
-        <div className="relative z-10 py-4">
+        <div className="relative z-10 py-8">
           {/* Bead icon grid */}
-          <div className="relative mb-4 inline-block" style={{ animation: 'float 3s ease-in-out infinite' }}>
-            <div className="grid grid-cols-4 gap-1.5 p-3 bg-gray-800/95 rounded-2xl shadow-2xl border border-gray-700">
+          <div className="relative mb-6 inline-block" style={{ animation: 'float 3s ease-in-out infinite' }}>
+            <div className="grid grid-cols-4 gap-2 p-4 bg-gray-800/95 rounded-3xl shadow-2xl border border-gray-600">
               {['bg-red-400', 'bg-blue-400', 'bg-yellow-400', 'bg-green-400',
                 'bg-purple-400', 'bg-pink-400', 'bg-orange-400', 'bg-teal-400',
                 'bg-indigo-400', 'bg-cyan-400', 'bg-lime-400', 'bg-amber-400',
                 'bg-rose-400', 'bg-sky-400', 'bg-emerald-400', 'bg-violet-400'].map((color, i) => (
-                <div
-                  key={i}
-                  className={`w-4 h-4 rounded-full ${color} shadow-lg`}
-                  style={{ animation: `float ${2 + (i % 3)}s ease-in-out infinite ${i * 0.1}s` }}
-                />
+                <div key={i} className="relative">
+                  <div
+                    className={`w-5 h-5 rounded-full ${color} shadow-xl hover:scale-150 transition-all duration-500 relative z-10`}
+                    style={{
+                      animation: `float ${2 + (i % 3)}s ease-in-out infinite ${i * 0.1}s`,
+                    }}
+                  />
+                  {i % 4 === 0 && <div className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-yellow-300 rounded-full animate-ping"></div>}
+                  {i % 4 === 1 && <div className="absolute -bottom-0.5 -left-0.5 w-0.5 h-0.5 bg-pink-300 rounded-full animate-pulse"></div>}
+                  {i % 4 === 2 && <div className="absolute -top-0.5 -left-0.5 w-0.5 h-0.5 bg-blue-300 rounded-full animate-bounce"></div>}
+                  {i % 4 === 3 && <div className="absolute -bottom-0.5 -right-0.5 w-1 h-1 bg-purple-300 rounded-full animate-spin"></div>}
+                </div>
               ))}
             </div>
+            {/* Sparkle decorations */}
+            <div className="absolute -top-3 -right-4 w-3 h-3 bg-gradient-to-br from-yellow-400 to-pink-500 rounded-full animate-ping"></div>
+            <div className="absolute -bottom-3 -left-4 w-2.5 h-2.5 bg-gradient-to-br from-blue-400 to-cyan-500 rounded-full animate-bounce"></div>
+            <div className="absolute -top-1 -right-2 w-2 h-2 bg-gradient-to-br from-pink-400 to-purple-500 rotate-45 animate-spin"></div>
+            <div className="absolute -bottom-1 -left-2 w-1.5 h-1.5 bg-gradient-to-br from-green-400 to-teal-500 rotate-45 animate-pulse"></div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 tracking-wide">
-            {t.title}
-          </h1>
-          <p className="mt-2 text-sm text-gray-400 tracking-wider">
-            {t.subtitle}
-          </p>
+          <div className="relative flex flex-col items-center space-y-3">
+            <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-blue-400 tracking-wider">
+              {t.title}
+            </h1>
+            <p className="text-sm sm:text-base font-light text-gray-400 tracking-[0.15em]">
+              {t.subtitle}
+            </p>
+          </div>
 
           {/* Nav links */}
-          <div className="mt-4 flex items-center justify-center gap-3 text-xs">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-xs">
             <Link
               href="/guide"
               className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 font-medium transition-colors"
@@ -338,23 +363,20 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="w-full md:max-w-2xl flex flex-col items-center space-y-5 px-4 pb-20">
+      <main className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
         {/* File Upload / Drop Zone */}
         <div
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-600 rounded-lg p-6 sm:p-8 text-center cursor-pointer hover:border-blue-500 hover:bg-gray-800/50 transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md"
+          className="border-2 border-dashed border-gray-600 rounded-lg p-6 sm:p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-gray-800/50 transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md"
           style={{ minHeight: '130px' }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 sm:h-12 sm:w-12 text-gray-500 mb-2 sm:mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
           </svg>
-          <p className="text-xs sm:text-sm text-gray-400">
-            {t.uploadDesc.split(t.uploadDesc)[0]}
-            <span className="font-medium text-blue-400">{t.uploadTitle}</span>
-          </p>
+          <p className="text-xs sm:text-sm text-gray-400">{t.uploadDesc}, <span className="font-medium text-blue-400">{t.uploadTitle}</span></p>
           <p className="text-xs text-gray-500 mt-1">{t.uploadFormats}</p>
         </div>
 
@@ -368,8 +390,8 @@ export default function Home() {
 
         {/* Controls and Output */}
         {originalImageSrc && (
-          <div className="w-full flex flex-col items-center space-y-5">
-            {/* Control Panel - card style like original */}
+          <div className="w-full flex flex-col items-center space-y-5 sm:space-y-6">
+            {/* Control Panel */}
             <div className="w-full md:max-w-2xl grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-800 p-4 sm:p-5 rounded-xl shadow-md border border-gray-700">
               {/* Granularity Input */}
               <div className="flex-1">
@@ -493,16 +515,16 @@ export default function Home() {
             <div className="w-full md:max-w-2xl">
               <canvas ref={originalCanvasRef} className="hidden"></canvas>
 
-              {/* Preview container - white background card like original */}
+              {/* Preview container */}
               <div className="bg-gray-800 p-4 rounded-xl shadow-md border border-gray-700">
                 {gridDimensions && (
-                  <div className="mb-3 flex items-center justify-between text-xs text-gray-400">
+                  <div className="mb-3 sm:mb-4 flex items-center justify-between text-xs text-gray-400">
                     <span>{t.result} ({gridDimensions.N} × {gridDimensions.M})</span>
                     <span>{t.totalBeads}: {totalBeadCount.toLocaleString()}</span>
                   </div>
                 )}
                 {/* White background container for the canvas */}
-                <div className="flex justify-center bg-white p-2 rounded-lg overflow-x-auto overflow-y-hidden"
+                <div className="flex justify-center mb-3 sm:mb-4 bg-white p-2 rounded-lg overflow-x-auto overflow-y-hidden"
                      style={{ minHeight: '150px' }}>
                   <canvas
                     ref={previewCanvasRef}
@@ -514,30 +536,30 @@ export default function Home() {
 
             {/* Color Statistics */}
             {colorCounts && Object.keys(colorCounts).length > 0 && (
-              <div className="w-full md:max-w-2xl bg-gray-800 p-4 rounded-xl shadow-md border border-gray-700">
-                <h3 className="text-base font-semibold mb-1 text-gray-200 text-center">
+              <div className="w-full md:max-w-2xl mt-6 bg-gray-800 p-4 rounded-lg shadow border border-gray-700">
+                <h3 className="text-lg font-semibold mb-1 text-gray-200 text-center">
                   {t.colorStats}
                 </h3>
                 <p className="text-xs text-center text-gray-400 mb-3">
                   {t.totalBeads}: {totalBeadCount.toLocaleString()} | {t.colors}: {sortedColorStats.length}
                 </p>
-                <ul className="space-y-1 max-h-72 overflow-y-auto pr-1 text-sm">
+                <ul className="space-y-1 max-h-60 overflow-y-auto pr-2 text-sm">
                   {sortedColorStats.map((item) => (
                     <li
                       key={item.hex}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-700/50 transition-colors"
+                      className="flex items-center justify-between p-1.5 rounded hover:bg-gray-700/50 transition-colors"
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2">
                         <span
-                          className="inline-block w-7 h-7 rounded-lg border border-gray-600 flex-shrink-0 shadow-sm"
+                          className="inline-block w-4 h-4 rounded border border-gray-500 flex-shrink-0"
                           style={{ backgroundColor: item.color }}
                         />
                         <span className="font-mono font-medium text-gray-200">
                           {item.displayKey}
                         </span>
                       </div>
-                      <span className="text-sm text-blue-400 font-medium">
-                        {item.count} <span className="text-gray-500 text-xs">{t.count}</span>
+                      <span className="text-xs text-gray-300">
+                        {item.count} {t.count}
                       </span>
                     </li>
                   ))}
@@ -549,7 +571,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full max-w-2xl mx-auto px-4 mt-auto pb-6">
+      <footer className="w-full md:max-w-4xl mx-auto px-4 mt-auto pt-8 pb-6">
         <div className="border-t border-gray-800 pt-4 text-center text-xs text-gray-500 space-y-1">
           <p>
             {t.license}: AGPL-3.0 |{' '}
